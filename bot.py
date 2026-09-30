@@ -1,10 +1,14 @@
+import os
 import requests
 
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
+# Загружаем переменные из файла .env
+load_dotenv()
 
-TOKEN = "8613420636:AAHILDmZ6DeVKATZciSvDZYD655_2X6s-8M"
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 GITHUB_OWNER = "notnzerkeesh"
 GITHUB_REPO = "github-telegram-bot"
@@ -22,7 +26,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def repo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}"
 
     response = requests.get(url)
@@ -41,14 +44,13 @@ async def repo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⭐ Stars: {data['stargazers_count']}\n"
         f"🍴 Forks: {data['forks_count']}\n"
         f"🐛 Open issues: {data['open_issues_count']}\n\n"
-        f"{data.get('description') or 'No description'}"
+        f"📝 Description: {data.get('description') or 'No description'}"
     )
 
     await update.message.reply_text(message)
 
 
 async def commits(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/commits"
 
     response = requests.get(url)
@@ -61,10 +63,15 @@ async def commits(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     commits_data = response.json()[:5]
 
+    if not commits_data:
+        await update.message.reply_text(
+            "Пока нет commits."
+        )
+        return
+
     message = "📝 Последние commits:\n\n"
 
     for commit in commits_data:
-
         author = commit["commit"]["author"]["name"]
         commit_message = commit["commit"]["message"]
 
@@ -77,7 +84,6 @@ async def commits(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def issues(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/issues"
 
     response = requests.get(url)
@@ -90,7 +96,12 @@ async def issues(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     issues_data = response.json()[:5]
 
-    if not issues_data:
+    real_issues = [
+        issue for issue in issues_data
+        if "pull_request" not in issue
+    ]
+
+    if not real_issues:
         await update.message.reply_text(
             "✅ Сейчас открытых issues нет."
         )
@@ -98,11 +109,7 @@ async def issues(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = "🐛 Open issues:\n\n"
 
-    for issue in issues_data:
-
-        if "pull_request" in issue:
-            continue
-
+    for issue in real_issues:
         message += (
             f"#{issue['number']} "
             f"{issue['title']}\n"
@@ -112,7 +119,6 @@ async def issues(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def pulls(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/pulls"
 
     response = requests.get(url)
@@ -134,10 +140,8 @@ async def pulls(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "🔀 Open Pull Requests:\n\n"
 
     for pull in pulls_data:
-
         message += (
-            f"#{pull['number']} "
-            f"{pull['title']}\n"
+            f"#{pull['number']} {pull['title']}\n"
             f"👤 {pull['user']['login']}\n\n"
         )
 
@@ -145,6 +149,9 @@ async def pulls(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    if not TOKEN:
+        print("❌ Ошибка: TELEGRAM_BOT_TOKEN не найден в .env")
+        return
 
     app = Application.builder().token(TOKEN).build()
 
@@ -154,7 +161,7 @@ def main():
     app.add_handler(CommandHandler("issues", issues))
     app.add_handler(CommandHandler("pulls", pulls))
 
-    print("Bot is running...")
+    print("✅ Bot is running...")
 
     app.run_polling()
 
